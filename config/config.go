@@ -6,9 +6,9 @@ import (
 
 // Config holds application configuration loaded from environment variables
 type Config struct {
-	GRPCPort            string `env:"GRPC_PORT" env-default:":50051" yaml:"grpc_port"`
+	GRPCPort            string `env:"GRPC_PORT" env-default:":50052" yaml:"grpc_port"`
 	RedisAddr           string `env:"REDIS_ADDR" env-default:"localhost:6379" yaml:"redis_addr"`
-	CustomerServiceAddr string `env:"CUSTOMER_SERVICE_ADDR" env-default:"localhost:50052" yaml:"customer_service_addr"`
+	CustomerServiceAddr string `env:"CUSTOMER_SERVICE_ADDR" env-default:"localhost:50051" yaml:"customer_service_addr"`
 }
 
 // Load loads configuration from environment variables

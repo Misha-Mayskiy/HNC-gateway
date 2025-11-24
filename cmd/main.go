@@ -27,7 +27,7 @@ func main() {
 
 	client, err := customerclient.New(cfg.CustomerServiceAddr)
 	if err != nil {
-		log.Fatalf("failed to init customer client: %v", err)
+		log.Fatalf("failed to init customer client: %v", cfg.CustomerServiceAddr)
 	}
 	defer client.Close()
 

@@ -7,19 +7,28 @@ import (
 
 	"google.golang.org/grpc"
 
-	customerclient "github.com/shvdev1/HackNeChange/api-gateway/internal/clients/customer"
 	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
-	"github.com/shvdev1/HackNeChange/api-gateway/internal/service"
 )
+
+// SettingsService defines the interface for settings operations (cache-aside)
+type SettingsService interface {
+	GetSettings(ctx context.Context, req *pb.GetUserSettingsRequest) (*pb.GetUserSettingsResponse, error)
+	UpdateSettings(ctx context.Context, req *pb.UpdateUserSettingsRequest) (*pb.UpdateUserSettingsResponse, error)
+}
+
+// CRUDClient defines the interface for CRUD operations (proxy to downstream)
+type CRUDClient interface {
+	CreateUserProfile(ctx context.Context, req *pb.CreateUserProfileRequest) (*pb.CreateUserProfileResponse, error)
+}
 
 // Server implements gRPC server for UserProfileService
 type Server struct {
 	pb.UnimplementedUserProfileServiceServer
-	service *service.Service
-	client  *customerclient.Client
+	service SettingsService
+	client  CRUDClient
 }
 
-func New(svc *service.Service, client *customerclient.Client) *Server {
+func New(svc SettingsService, client CRUDClient) *Server {
 	return &Server{service: svc, client: client}
 }
 

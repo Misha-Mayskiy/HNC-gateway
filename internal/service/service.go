@@ -4,19 +4,25 @@ import (
 	"context"
 	"log"
 
-	customerclient "github.com/shvdev1/HackNeChange/api-gateway/internal/clients/customer"
 	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
 	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
 )
 
+// CustomerServiceClient defines the interface for calling downstream customer service
+type CustomerServiceClient interface {
+	GetSettings(ctx context.Context, req *pb.GetUserSettingsRequest) (*pb.GetUserSettingsResponse, error)
+	UpdateSettings(ctx context.Context, req *pb.UpdateUserSettingsRequest) (*pb.UpdateUserSettingsResponse, error)
+	CreateUserProfile(ctx context.Context, req *pb.CreateUserProfileRequest) (*pb.CreateUserProfileResponse, error)
+}
+
 // Service provides business logic for the API gateway
 type Service struct {
 	store  redisstorage.Storage
-	client *customerclient.Client
+	client CustomerServiceClient
 }
 
 // New creates a new service
-func New(store redisstorage.Storage, client *customerclient.Client) *Service {
+func New(store redisstorage.Storage, client CustomerServiceClient) *Service {
 	return &Service{store: store, client: client}
 }
 
