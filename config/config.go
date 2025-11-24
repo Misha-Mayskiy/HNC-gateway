@@ -1,41 +1,21 @@
 package config
 
 import (
-	"os"
-	"strconv"
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// Config holds service configuration values
+// Config holds application configuration loaded from environment variables
 type Config struct {
-	RedisHost     string
-	RedisPort     string
-	RedisPassword string
-	RedisDB       int
-	ServerPort    string
+	GRPCPort            string `env:"GRPC_PORT" env-default:":50051" yaml:"grpc_port"`
+	RedisAddr           string `env:"REDIS_ADDR" env-default:"localhost:6379" yaml:"redis_addr"`
+	CustomerServiceAddr string `env:"CUSTOMER_SERVICE_ADDR" env-default:"localhost:50052" yaml:"customer_service_addr"`
 }
 
-// LoadConfig reads configuration from environment variables with sensible defaults.
-func LoadConfig() (*Config, error) {
-	cfg := &Config{
-		RedisHost:     getEnv("REDIS_HOST", "127.0.0.1"),
-		RedisPort:     getEnv("REDIS_PORT", "6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		ServerPort:    getEnv("SERVER_PORT", "8080"),
-	}
-
-	dbStr := getEnv("REDIS_DB", "0")
-	db, err := strconv.Atoi(dbStr)
-	if err != nil {
+// Load loads configuration from environment variables
+func Load() (*Config, error) {
+	cfg := &Config{}
+	if err := cleanenv.ReadEnv(cfg); err != nil {
 		return nil, err
 	}
-	cfg.RedisDB = db
-
 	return cfg, nil
-}
-
-func getEnv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }

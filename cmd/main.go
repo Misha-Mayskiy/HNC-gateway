@@ -1,49 +1,50 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/shvdev1/HackNeChange/api-gateway/config"
-	redisstore "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
-	rest "github.com/shvdev1/HackNeChange/api-gateway/internal/transport/rest"
+	customerclient "github.com/shvdev1/HackNeChange/api-gateway/internal/clients/customer"
+	grpcserver "github.com/shvdev1/HackNeChange/api-gateway/internal/grpc/server"
+	"github.com/shvdev1/HackNeChange/api-gateway/internal/service"
+	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	addr := fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
-	})
-
-	// quick ping to verify connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		log.Fatalf("failed to connect to redis at %s: %v", addr, err)
+	// init redis storage
+	store, err := redisstorage.New(cfg.RedisAddr)
+	if err != nil {
+		log.Fatalf("failed to init redis storage: %v", err)
 	}
 
-	store := redisstore.NewSettingsStorage(rdb)
-	handler := rest.NewSettingsHandler(store)
+	client, err := customerclient.New(cfg.CustomerServiceAddr)
+	if err != nil {
+		log.Fatalf("failed to init customer client: %v", err)
+	}
+	defer client.Close()
 
-	router := gin.Default()
-	api := router.Group("/api/v1")
-	handler.RegisterRoutes(api)
+	svc := service.New(store, client)
+	srv := grpcserver.New(svc, client)
 
-	serverAddr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("starting server on %s", serverAddr)
-	if err := router.Run(serverAddr); err != nil {
-		log.Fatalf("server failed: %v", err)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("shutting down gRPC server")
+		// TODO: graceful stop handled by context or grpc server reference
+		os.Exit(0)
+	}()
+
+	if err := grpcserver.Run(cfg.GRPCPort, srv); err != nil {
+		log.Fatalf("failed to run gRPC server: %v", err)
 	}
 }
