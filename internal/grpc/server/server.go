@@ -14,6 +14,7 @@ import (
 type SettingsService interface {
 	GetSettings(ctx context.Context, req *pb.GetUserSettingsRequest) (*pb.GetUserSettingsResponse, error)
 	UpdateSettings(ctx context.Context, req *pb.UpdateUserSettingsRequest) (*pb.UpdateUserSettingsResponse, error)
+	AnalyzeReview(ctx context.Context, req *pb.AnalyzeReviewRequest) (*pb.AnalyzeReviewResponse, error)
 }
 
 // CRUDClient defines the interface for CRUD operations (proxy to downstream)
@@ -50,6 +51,10 @@ func (s *Server) GetUserSettings(ctx context.Context, req *pb.GetUserSettingsReq
 // UpdateUserSettings uses service logic to update and then invalidate cache
 func (s *Server) UpdateUserSettings(ctx context.Context, req *pb.UpdateUserSettingsRequest) (*pb.UpdateUserSettingsResponse, error) {
 	return s.service.UpdateSettings(ctx, req)
+}
+
+func (s *Server) AnalyzeReview(ctx context.Context, req *pb.AnalyzeReviewRequest) (*pb.AnalyzeReviewResponse, error) {
+	return s.service.AnalyzeReview(ctx, req)
 }
 
 // Run starts the grpc server

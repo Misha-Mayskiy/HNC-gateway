@@ -9,6 +9,8 @@ import (
 	"github.com/shvdev1/HackNeChange/api-gateway/config"
 	customerclient "github.com/shvdev1/HackNeChange/api-gateway/internal/clients/customer"
 	grpcserver "github.com/shvdev1/HackNeChange/api-gateway/internal/grpc/server"
+
+	"github.com/shvdev1/HackNeChange/api-gateway/internal/infrastructure/kafka"
 	"github.com/shvdev1/HackNeChange/api-gateway/internal/service"
 	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
 )
@@ -19,19 +21,31 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	// init redis storage
+	// Redis
 	store, err := redisstorage.New(cfg.RedisAddr)
 	if err != nil {
 		log.Fatalf("failed to init redis storage: %v", err)
 	}
 
+	// Kafka Producer
+	producer, err := kafka.NewProducer(cfg.KafkaBrokers, cfg.KafkaTopic)
+	if err != nil {
+		log.Fatalf("failed to init kafka producer: %v", err)
+	}
+	defer producer.Close()
+	log.Println("✅ Kafka producer initialized")
+
+	// Customer Client
 	client, err := customerclient.New(cfg.CustomerServiceAddr)
 	if err != nil {
 		log.Fatalf("failed to init customer client: %v", cfg.CustomerServiceAddr)
 	}
 	defer client.Close()
 
-	svc := service.New(store, client)
+	// Service
+	svc := service.New(store, client, producer)
+
+	// Server
 	srv := grpcserver.New(svc, client)
 
 	quit := make(chan os.Signal, 1)
@@ -40,7 +54,6 @@ func main() {
 	go func() {
 		<-quit
 		log.Println("shutting down gRPC server")
-		// TODO: graceful stop handled by context or grpc server reference
 		os.Exit(0)
 	}()
 

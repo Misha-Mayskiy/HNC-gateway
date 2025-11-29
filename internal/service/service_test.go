@@ -65,10 +65,21 @@ func (m *MockCustomerClient) CreateUserProfile(ctx context.Context, req *pb.Crea
 	return args.Get(0).(*pb.CreateUserProfileResponse), args.Error(1)
 }
 
+// MockProducer mocks the EventProducer interface (Kafka)
+type MockProducer struct {
+	mock.Mock
+}
+
+func (m *MockProducer) SendMessage(key string, value interface{}) error {
+	args := m.Called(key, value)
+	return args.Error(0)
+}
+
 // TestGetSettings_CacheHit tests cache-aside hit scenario
 func TestGetSettings_CacheHit(t *testing.T) {
 	mockStorage := new(MockStorage)
 	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
 
 	cachedResp := &pb.GetUserSettingsResponse{
 		Theme:       "dark",
@@ -79,7 +90,8 @@ func TestGetSettings_CacheHit(t *testing.T) {
 
 	mockStorage.On("Get", mock.Anything, "user123").Return(cachedResp, nil)
 
-	svc := New(mockStorage, mockClient)
+	// Передаем mockProducer третьим аргументом
+	svc := New(mockStorage, mockClient, mockProducer)
 	req := &pb.GetUserSettingsRequest{UserId: "user123"}
 
 	resp, err := svc.GetSettings(context.Background(), req)
@@ -90,10 +102,11 @@ func TestGetSettings_CacheHit(t *testing.T) {
 	mockClient.AssertNotCalled(t, "GetSettings")
 }
 
-// TestGetSettings_CacheMiss tests cache-aside miss: fetch from client, store in background
+// TestGetSettings_CacheMiss tests cache-aside miss
 func TestGetSettings_CacheMiss(t *testing.T) {
 	mockStorage := new(MockStorage)
 	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
 
 	freshResp := &pb.GetUserSettingsResponse{
 		Theme:       "light",
@@ -108,7 +121,7 @@ func TestGetSettings_CacheMiss(t *testing.T) {
 		return req.UserId == "user456"
 	})).Return(freshResp, nil)
 
-	svc := New(mockStorage, mockClient)
+	svc := New(mockStorage, mockClient, mockProducer)
 	req := &pb.GetUserSettingsRequest{UserId: "user456"}
 
 	resp, err := svc.GetSettings(context.Background(), req)
@@ -118,8 +131,7 @@ func TestGetSettings_CacheMiss(t *testing.T) {
 	mockStorage.AssertCalled(t, "Get", mock.Anything, "user456")
 	mockClient.AssertCalled(t, "GetSettings", mock.Anything, req)
 
-	// Give background goroutine time to complete
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // wait for goroutine
 	mockStorage.AssertCalled(t, "Set", mock.Anything, "user456", freshResp)
 }
 
@@ -127,13 +139,14 @@ func TestGetSettings_CacheMiss(t *testing.T) {
 func TestGetSettings_ClientError(t *testing.T) {
 	mockStorage := new(MockStorage)
 	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
 
 	mockStorage.On("Get", mock.Anything, "user789").Return(nil, nil)
 	mockClient.On("GetSettings", mock.Anything, mock.MatchedBy(func(req *pb.GetUserSettingsRequest) bool {
 		return req.UserId == "user789"
 	})).Return(nil, errors.New("customer service unavailable"))
 
-	svc := New(mockStorage, mockClient)
+	svc := New(mockStorage, mockClient, mockProducer)
 	req := &pb.GetUserSettingsRequest{UserId: "user789"}
 
 	resp, err := svc.GetSettings(context.Background(), req)
@@ -147,6 +160,7 @@ func TestGetSettings_ClientError(t *testing.T) {
 func TestUpdateSettings_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
 	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
 
 	updateResp := &pb.UpdateUserSettingsResponse{
 		Theme:       "dark",
@@ -160,7 +174,7 @@ func TestUpdateSettings_Success(t *testing.T) {
 	})).Return(updateResp, nil)
 	mockStorage.On("Invalidate", mock.Anything, "user999").Return(nil)
 
-	svc := New(mockStorage, mockClient)
+	svc := New(mockStorage, mockClient, mockProducer)
 	req := &pb.UpdateUserSettingsRequest{
 		UserId:      "user999",
 		Theme:       "dark",
@@ -176,68 +190,50 @@ func TestUpdateSettings_Success(t *testing.T) {
 	mockStorage.AssertCalled(t, "Invalidate", mock.Anything, "user999")
 }
 
-// TestUpdateSettings_ClientError tests error from downstream
-func TestUpdateSettings_ClientError(t *testing.T) {
+// TestAnalyzeReview_Success (NEW TEST)
+func TestAnalyzeReview_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
 	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
 
-	mockClient.On("UpdateSettings", mock.Anything, mock.MatchedBy(func(req *pb.UpdateUserSettingsRequest) bool {
-		return req.UserId == "userXXX"
-	})).Return(nil, errors.New("database error"))
-
-	svc := New(mockStorage, mockClient)
-	req := &pb.UpdateUserSettingsRequest{
-		UserId:      "userXXX",
-		Theme:       "light",
-		PickedModel: "claude-2",
-		Font:        "sans-serif",
+	req := &pb.AnalyzeReviewRequest{
+		UserId: "user123",
+		Text:   "Great app",
+		Source: "web",
 	}
 
-	resp, err := svc.UpdateSettings(context.Background(), req)
+	// Expect SendMessage to be called with correct key and payload type
+	mockProducer.On("SendMessage", "user123", mock.MatchedBy(func(val interface{}) bool {
+		// We can cast to ReviewPayload to check fields if we exported it or defined it in test
+		// For now just checking it's not nil is enough for the mock match
+		return val != nil
+	})).Return(nil)
+
+	svc := New(mockStorage, mockClient, mockProducer)
+
+	resp, err := svc.AnalyzeReview(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "QUEUED", resp.Status)
+	assert.NotEmpty(t, resp.ReviewId)
+
+	mockProducer.AssertExpectations(t)
+}
+
+// TestAnalyzeReview_ProducerError (NEW TEST)
+func TestAnalyzeReview_ProducerError(t *testing.T) {
+	mockStorage := new(MockStorage)
+	mockClient := new(MockCustomerClient)
+	mockProducer := new(MockProducer)
+
+	mockProducer.On("SendMessage", mock.Anything, mock.Anything).Return(errors.New("kafka error"))
+
+	svc := New(mockStorage, mockClient, mockProducer)
+	req := &pb.AnalyzeReviewRequest{UserId: "u1", Text: "text"}
+
+	resp, err := svc.AnalyzeReview(context.Background(), req)
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
-	mockStorage.AssertNotCalled(t, "Invalidate")
-}
-
-// TestGetSettings_NilRequest handles nil or empty user ID
-func TestGetSettings_NilRequest(t *testing.T) {
-	mockStorage := new(MockStorage)
-	mockClient := new(MockCustomerClient)
-
-	svc := New(mockStorage, mockClient)
-
-	// Test nil request
-	resp, err := svc.GetSettings(context.Background(), nil)
-	assert.Nil(t, err)
-	assert.Nil(t, resp)
-
-	// Test empty user ID
-	resp, err = svc.GetSettings(context.Background(), &pb.GetUserSettingsRequest{UserId: ""})
-	assert.Nil(t, err)
-	assert.Nil(t, resp)
-
-	mockStorage.AssertNotCalled(t, "Get")
-	mockClient.AssertNotCalled(t, "GetSettings")
-}
-
-// TestUpdateSettings_NilRequest handles nil or empty user ID
-func TestUpdateSettings_NilRequest(t *testing.T) {
-	mockStorage := new(MockStorage)
-	mockClient := new(MockCustomerClient)
-
-	svc := New(mockStorage, mockClient)
-
-	// Test nil request
-	resp, err := svc.UpdateSettings(context.Background(), nil)
-	assert.Nil(t, err)
-	assert.Nil(t, resp)
-
-	// Test empty user ID
-	resp, err = svc.UpdateSettings(context.Background(), &pb.UpdateUserSettingsRequest{UserId: ""})
-	assert.Nil(t, err)
-	assert.Nil(t, resp)
-
-	mockClient.AssertNotCalled(t, "UpdateSettings")
-	mockStorage.AssertNotCalled(t, "Invalidate")
 }

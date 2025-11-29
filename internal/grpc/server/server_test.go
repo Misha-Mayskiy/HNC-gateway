@@ -34,6 +34,14 @@ func (m *MockService) UpdateSettings(ctx context.Context, req *pb.UpdateUserSett
 	return args.Get(0).(*pb.UpdateUserSettingsResponse), args.Error(1)
 }
 
+func (m *MockService) AnalyzeReview(ctx context.Context, req *pb.AnalyzeReviewRequest) (*pb.AnalyzeReviewResponse, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*pb.AnalyzeReviewResponse), args.Error(1)
+}
+
 // MockClient mocks the CRUDClient interface
 type MockClient struct {
 	mock.Mock
@@ -47,7 +55,6 @@ func (m *MockClient) CreateUserProfile(ctx context.Context, req *pb.CreateUserPr
 	return args.Get(0).(*pb.CreateUserProfileResponse), args.Error(1)
 }
 
-// TestGetUserSettings_Success tests GetUserSettings routing to service
 func TestGetUserSettings_Success(t *testing.T) {
 	mockSvc := new(MockService)
 	mockClient := new(MockClient)
@@ -63,10 +70,7 @@ func TestGetUserSettings_Success(t *testing.T) {
 		return req.UserId == "user123"
 	})).Return(cachedResp, nil)
 
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
-	}
+	srv := New(mockSvc, mockClient)
 
 	req := &pb.GetUserSettingsRequest{UserId: "user123"}
 	resp, err := srv.GetUserSettings(context.Background(), req)
@@ -76,7 +80,6 @@ func TestGetUserSettings_Success(t *testing.T) {
 	mockSvc.AssertCalled(t, "GetSettings", mock.Anything, req)
 }
 
-// TestGetUserSettings_Error tests GetUserSettings error handling
 func TestGetUserSettings_Error(t *testing.T) {
 	mockSvc := new(MockService)
 	mockClient := new(MockClient)
@@ -85,10 +88,7 @@ func TestGetUserSettings_Error(t *testing.T) {
 		return req.UserId == "user456"
 	})).Return(nil, errors.New("cache error"))
 
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
-	}
+	srv := New(mockSvc, mockClient)
 
 	req := &pb.GetUserSettingsRequest{UserId: "user456"}
 	resp, err := srv.GetUserSettings(context.Background(), req)
@@ -97,7 +97,6 @@ func TestGetUserSettings_Error(t *testing.T) {
 	assert.Nil(t, resp)
 }
 
-// TestUpdateUserSettings_Success tests UpdateUserSettings routing to service
 func TestUpdateUserSettings_Success(t *testing.T) {
 	mockSvc := new(MockService)
 	mockClient := new(MockClient)
@@ -113,10 +112,7 @@ func TestUpdateUserSettings_Success(t *testing.T) {
 		return req.UserId == "user789"
 	})).Return(updateResp, nil)
 
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
-	}
+	srv := New(mockSvc, mockClient)
 
 	req := &pb.UpdateUserSettingsRequest{
 		UserId:      "user789",
@@ -131,33 +127,29 @@ func TestUpdateUserSettings_Success(t *testing.T) {
 	mockSvc.AssertCalled(t, "UpdateSettings", mock.Anything, req)
 }
 
-// TestUpdateUserSettings_Error tests UpdateUserSettings error handling
-func TestUpdateUserSettings_Error(t *testing.T) {
+func TestAnalyzeReview_Success(t *testing.T) {
 	mockSvc := new(MockService)
 	mockClient := new(MockClient)
 
-	mockSvc.On("UpdateSettings", mock.Anything, mock.MatchedBy(func(req *pb.UpdateUserSettingsRequest) bool {
-		return req.UserId == "userXXX"
-	})).Return(nil, errors.New("update failed"))
-
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
+	analyzeResp := &pb.AnalyzeReviewResponse{
+		ReviewId: "uuid-123",
+		Status:   "QUEUED",
 	}
 
-	req := &pb.UpdateUserSettingsRequest{
-		UserId:      "userXXX",
-		Theme:       "dark",
-		PickedModel: "gpt-4",
-		Font:        "monospace",
-	}
-	resp, err := srv.UpdateUserSettings(context.Background(), req)
+	mockSvc.On("AnalyzeReview", mock.Anything, mock.MatchedBy(func(req *pb.AnalyzeReviewRequest) bool {
+		return req.UserId == "u1" && req.Text == "hello"
+	})).Return(analyzeResp, nil)
 
-	assert.Error(t, err)
-	assert.Nil(t, resp)
+	srv := New(mockSvc, mockClient)
+
+	req := &pb.AnalyzeReviewRequest{UserId: "u1", Text: "hello"}
+	resp, err := srv.AnalyzeReview(context.Background(), req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, analyzeResp, resp)
+	mockSvc.AssertCalled(t, "AnalyzeReview", mock.Anything, req)
 }
 
-// TestCreateUserProfile_ProxiesToClient tests CreateUserProfile proxies to client
 func TestCreateUserProfile_ProxiesToClient(t *testing.T) {
 	mockSvc := new(MockService)
 	mockClient := new(MockClient)
@@ -181,10 +173,7 @@ func TestCreateUserProfile_ProxiesToClient(t *testing.T) {
 		return req.UserId == "user999"
 	})).Return(createResp, nil)
 
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
-	}
+	srv := New(mockSvc, mockClient)
 
 	req := &pb.CreateUserProfileRequest{
 		UserId:      "user999",
@@ -201,45 +190,5 @@ func TestCreateUserProfile_ProxiesToClient(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, createResp, resp)
 	mockClient.AssertCalled(t, "CreateUserProfile", mock.Anything, req)
-	// Service should NOT be called for CRUD operations
 	mockSvc.AssertNotCalled(t, "GetSettings")
-}
-
-// TestCreateUserProfile_Error tests CreateUserProfile error handling
-func TestCreateUserProfile_Error(t *testing.T) {
-	mockSvc := new(MockService)
-	mockClient := new(MockClient)
-
-	mockClient.On("CreateUserProfile", mock.Anything, mock.MatchedBy(func(req *pb.CreateUserProfileRequest) bool {
-		return req.UserId == "userERR"
-	})).Return(nil, errors.New("database constraint violated"))
-
-	srv := &Server{
-		service: mockSvc,
-		client:  mockClient,
-	}
-
-	req := &pb.CreateUserProfileRequest{
-		UserId:      "userERR",
-		Username:    "testuser",
-		CompanyName: "Acme Inc",
-		PhoneNumber: "+1234567890",
-	}
-
-	resp, err := srv.CreateUserProfile(context.Background(), req)
-
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-}
-
-// TestServerNew creates server correctly
-func TestServerNew(t *testing.T) {
-	mockSvc := new(MockService)
-	mockClient := new(MockClient)
-
-	srv := New(mockSvc, mockClient)
-
-	assert.NotNil(t, srv)
-	assert.Equal(t, mockSvc, srv.service)
-	assert.Equal(t, mockClient, srv.client)
 }

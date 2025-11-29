@@ -3,10 +3,26 @@ package service
 import (
 	"context"
 	"log"
+	"time"
 
+	"github.com/google/uuid"
 	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
 	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
 )
+
+// EventProducer интерфейс, чтобы не зависеть от kafka напрямую (для тестов удобно)
+type EventProducer interface {
+	SendMessage(key string, value interface{}) error
+}
+
+// ReviewPayload - то, что улетит в Кафку (должно совпадать с тем, что ждет process-service)
+type ReviewPayload struct {
+	ReviewID  string    `json:"review_id"`
+	UserID    string    `json:"user_id"`
+	Text      string    `json:"text"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
 // CustomerServiceClient defines the interface for calling downstream customer service
 type CustomerServiceClient interface {
@@ -17,13 +33,18 @@ type CustomerServiceClient interface {
 
 // Service provides business logic for the API gateway
 type Service struct {
-	store  redisstorage.Storage
-	client CustomerServiceClient
+	store    redisstorage.Storage
+	client   CustomerServiceClient
+	producer EventProducer
 }
 
 // New creates a new service
-func New(store redisstorage.Storage, client CustomerServiceClient) *Service {
-	return &Service{store: store, client: client}
+func New(store redisstorage.Storage, client CustomerServiceClient, producer EventProducer) *Service {
+	return &Service{
+		store:    store,
+		client:   client,
+		producer: producer,
+	}
 }
 
 // GetSettings implements cache-aside: check cache, otherwise fetch from customer and store in background
@@ -68,4 +89,31 @@ func (s *Service) UpdateSettings(ctx context.Context, req *pb.UpdateUserSettings
 		log.Printf("failed to invalidate cache for user %s: %v", req.UserId, err)
 	}
 	return resp, nil
+}
+
+// AnalyzeReview отправляет отзыв в Kafka для асинхронного анализа
+func (s *Service) AnalyzeReview(ctx context.Context, req *pb.AnalyzeReviewRequest) (*pb.AnalyzeReviewResponse, error) {
+	// 1. Генерируем UUID для отзыва
+	reviewID := uuid.New().String()
+
+	// 2. Собираем пейлоад
+	payload := ReviewPayload{
+		ReviewID:  reviewID,
+		UserID:    req.UserId,
+		Text:      req.Text,
+		Source:    req.Source,
+		CreatedAt: time.Now(),
+	}
+
+	// 3. Отправляем в Kafka (асинхронно для клиента, синхронно для кода)
+	if err := s.producer.SendMessage(req.UserId, payload); err != nil {
+		log.Printf("Failed to send review to kafka: %v", err)
+		return nil, err
+	}
+
+	// 4. Сразу возвращаем ответ "В очереди"
+	return &pb.AnalyzeReviewResponse{
+		ReviewId: reviewID,
+		Status:   "QUEUED",
+	}, nil
 }
