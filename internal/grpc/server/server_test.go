@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
+	pb "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 )
 
 // MockService mocks the SettingsService interface

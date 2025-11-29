@@ -8,7 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	customer "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
+	customer "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 )
 
 const (

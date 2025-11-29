@@ -6,13 +6,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/shvdev1/HackNeChange/api-gateway/config"
-	customerclient "github.com/shvdev1/HackNeChange/api-gateway/internal/clients/customer"
-	grpcserver "github.com/shvdev1/HackNeChange/api-gateway/internal/grpc/server"
+	"api-gateway/config"
+	customerclient "api-gateway/internal/clients/customer"
+	grpcserver "api-gateway/internal/grpc/server"
 
-	"github.com/shvdev1/HackNeChange/api-gateway/internal/infrastructure/kafka"
-	"github.com/shvdev1/HackNeChange/api-gateway/internal/service"
-	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
+	"api-gateway/internal/infrastructure/kafka"
+	"api-gateway/internal/service"
+	redisstorage "api-gateway/internal/storage/redis"
 )
 
 func main() {

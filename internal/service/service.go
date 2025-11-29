@@ -5,9 +5,10 @@ import (
 	"log"
 	"time"
 
+	redisstorage "api-gateway/internal/storage/redis"
+
+	pb "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 	"github.com/google/uuid"
-	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
-	redisstorage "github.com/shvdev1/HackNeChange/api-gateway/internal/storage/redis"
 )
 
 // EventProducer интерфейс, чтобы не зависеть от kafka напрямую (для тестов удобно)

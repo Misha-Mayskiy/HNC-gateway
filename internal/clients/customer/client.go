@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	customer "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
+	customer "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 )
 
 // Client is a wrapper around the generated gRPC client

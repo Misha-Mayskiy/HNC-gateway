@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
+	pb "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 )
 
 // SettingsService defines the interface for settings operations (cache-aside)

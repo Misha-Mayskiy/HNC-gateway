@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/shvdev1/HackNeChange/api-gateway/internal/gen"
+	pb "github.com/Misha-Mayskiy/HNC-proto/gen/go/user"
 )
 
 func TestRedisStorage_Set_Get_Success(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/shvdev1/HackNeChange/api-gateway
+module api-gateway
 
 go 1.24
 
