@@ -1,6 +1,6 @@
 module github.com/shvdev1/HackNeChange/api-gateway
 
-go 1.25.4
+go 1.24
 
 require (
 	github.com/IBM/sarama v1.46.3
